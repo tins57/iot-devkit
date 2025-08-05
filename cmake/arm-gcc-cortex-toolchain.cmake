@@ -29,6 +29,8 @@ endif(WIN32)
 
 find_program(COMPILER_ON_PATH "${TARGET_TRIPLET}gcc${TOOLCHAIN_EXT}")
 
+set(ARM_GCC_PATH "/opt/arm-gnu-toolchain-13.3.rel1-x86_64-arm-none-eabi/bin")
+
 if(DEFINED ENV{ARM_GCC_PATH}) 
     # use the environment variable first    
     file(TO_CMAKE_PATH $ENV{ARM_GCC_PATH} ARM_TOOLCHAIN_PATH)

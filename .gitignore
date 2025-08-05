@@ -20,5 +20,6 @@ CTestTestfile.cmake
 *.map
 #*.a
 *.htm
+*.tar*
 shared/lib/netxduo/*
 shared/lib/threadx/*

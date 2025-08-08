@@ -341,9 +341,8 @@ __weak void button_a_callback()
     USER_LED_ON();
     if (BUTTON_A_IS_PRESSED)
     {
-        val += 32;
-        if (val > 2047)
-            val = 2047;
+        if (val < 4095)
+            val = val * 2 + 1;
         RGB_LED_SET_R(val);
         RGB_LED_SET_G(val);
         RGB_LED_SET_B(val);
@@ -358,12 +357,11 @@ __weak void button_b_callback()
     USER_LED_OFF();
     if (BUTTON_B_IS_PRESSED)
     {
-        val -= 32;
-        if (val < 0)
-            val = 0;
-        RGB_LED_SET_R(val);
+        if (val > 0)
+            val = val >> 1;
+        RGB_LED_SET_R(val / 3);
         RGB_LED_SET_G(val);
-        RGB_LED_SET_B(val);
+        RGB_LED_SET_B(val >> 5);
     }
 }
 

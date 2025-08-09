@@ -111,6 +111,7 @@ void board_init(void)
 
     // Discover and intialize OLED screen
     Init_Screen();
+
 }
 
 /**
@@ -368,17 +369,21 @@ __weak void button_b_callback()
     WIFI_LED_OFF();
     CLOUD_LED_OFF();
     // USER_LED_OFF();
+    /* Attempt to turn off the POWER LED uint16_t pin_id = 1;
+    for (; pin_id != GPIO_PIN_15 * 2; pin_id *= 2)
+        GPIOH->BSRR = (uint32_t)pin_id << 16; */
+
     if (BUTTON_B_IS_PRESSED)
     {
         btn_b++;
         if (BUTTON_A_IS_PRESSED) {
             btn_b+=59;
         }
-        if (val > 0)
-            val = val >> 1;
         RGB_LED_SET_R(val);
         RGB_LED_SET_G(val / 2);
         RGB_LED_SET_B(val >> 4);
+        if (val > 0)
+            val = val >> 1;
     }
 }
 

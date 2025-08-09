@@ -70,6 +70,7 @@ static double ang1_int = 0.;
 static double ang2_int = 0.;
 static int shaken = 0;
 static int special_screen = 0;
+static int prev_special_screen = 0;
 
 float max_temp = -250.;
 float min_temp = 250.;
@@ -83,10 +84,11 @@ static char* strs[] = {
     "MAX  ", "mode ",
     "min  ", "mode ",
     "tilt ", "me:-)",
-    "up  4", " MAX ",
-    "dwn 4", " min ",
-    "sdw 4", "deflt",
-    "Good!", "day2u"
+    "^ up ", "4 MAX",
+    "v dwn", "4 min",
+    " side", "deflt",
+    "Good!", "day2u",
+    " woof", "woof "
 };
 
 static void eclipsetx_thread_entry(ULONG parameter)
@@ -130,8 +132,8 @@ static void eclipsetx_thread_entry(ULONG parameter)
 
         char c = 'N';
         char d = ' ';
-        int asin_to_pole = (int) (200./3.1415927 * asin((double)mag.magnetic_mG[0] / m_xy));
-        int asin_to_mdir = (int) (200./3.1415927 * asin(-(double)mag.magnetic_mG[1] / m_total));
+        int asin_to_pole = (200./3.1415927 * asin((double)mag.magnetic_mG[0] / m_xy));
+        int asin_to_mdir = (200./3.1415927 * asin(-(double)mag.magnetic_mG[1] / m_total));
 
         if ((double)mag.magnetic_mG[1] >= 0.) {
             c = 'S';
@@ -160,11 +162,18 @@ static void eclipsetx_thread_entry(ULONG parameter)
         }
 
         sprintf(s, "%c%c%+3i|%+3i|%2i.", c, d,
-            asin_to_pole,
-            asin_to_mdir,
+            (int) asin_to_pole,
+            (int) asin_to_mdir,
             (int) (log(m_total) * 10.));
         ssd1306_SetCursor(0, L3);
         ssd1306_WriteString(s, Font_7x10, White);
+        
+        for (i = 0; i<128; i+=1) {
+                ssd1306_DrawPixel(i, 63, Black);
+        }
+        ssd1306_DrawPixel(63, 63, White);
+        ssd1306_DrawPixel(65, 63, White);
+        ssd1306_DrawPixel(64 + (int)((double)mag.magnetic_mG[0] / m_xy * 64), 63, White);
 
 
         lsm6dsl_data_t accel_gyro = lsm6dsl_data_read();
@@ -175,44 +184,53 @@ static void eclipsetx_thread_entry(ULONG parameter)
                 accel_gyro.angular_rate_mdps[1] * accel_gyro.angular_rate_mdps[1] +
                 accel_gyro.angular_rate_mdps[2] * accel_gyro.angular_rate_mdps[2]));
         // printf("accel_total=%i\r\n", (int) (accel_total / 80.));
-        accel_integral = accel_integral * 0.9 + accel_total * 0.1;
+        accel_integral = accel_integral * 0.9 + accel_total * 0.1; // not used
 
-        if (~shaken)
-            angul_integral = angul_integral * 0.7 + angul_total * 0.3;
+        if (!shaken) {
+                // only if not shaken recently -- standard behaviour
+                angul_integral = angul_integral * 0.75 + angul_total * 0.25;
+                ang0_int = ang0_int * 0.7 + 0.3 * (double)(accel_gyro.angular_rate_mdps[0]);
+                ang1_int = ang1_int * 0.7 + 0.3 * (double)(accel_gyro.angular_rate_mdps[1]);
+                ang2_int = ang2_int * 0.7 + 0.3 * (double)(accel_gyro.angular_rate_mdps[2]);
+        } else {
+                // Shaken cool down
+                angul_integral = angul_integral * 0.9 + 0.00 * angul_total;
+                ang0_int = ang0_int * 0.9 + 0.0 * (double)(accel_gyro.angular_rate_mdps[0]);
+                ang1_int = ang1_int * 0.9 + 0.0 * (double)(accel_gyro.angular_rate_mdps[1]);
+                ang2_int = ang2_int * 0.9 + 0.0 * (double)(accel_gyro.angular_rate_mdps[2]);
+        }
 
         // Shake it up
         {
-            ssd1306_SetCursor(95, L1 + 1);
             int shake_val = (int) (log(angul_integral + 1.) * 5);
+            if (shaken > 1) // To prevent fast firings
+                --shaken;
 
             // If change of recently tilted status needed
-            if ((shake_val >= 58.0) && ~shaken) {
+            int just_shaken = 0;
+            if ((shake_val >= 59.0) /* && !shaken */) {
                 // Just shaken
-                shaken |= 1;
-                ang0_int = ang0_int * 0.95 + 0.05 * (double)(accel_gyro.angular_rate_mdps[0]);
-                ang1_int = ang1_int * 0.95 + 0.05 * (double)(accel_gyro.angular_rate_mdps[1]);
-                ang2_int = ang2_int * 0.95 + 0.05 * (double)(accel_gyro.angular_rate_mdps[2]);
-            } else if (shake_val <= 57.0) {
-                shaken &= 0;
+                if (shaken == 0)
+                    just_shaken = 1;
+                shaken = 3;
+            } else if ((shake_val <= 58.0) && (shaken == 1)) {
+                shaken = 0;
             }
 
+            char sh_state = '.';
+            if (shaken) { // Figuring the direction
 
-            if (shaken) {
-                char sh_state = '!';
                 if (abs(ang2_int) >= abs(ang0_int) && (abs(ang2_int) >= abs(ang1_int))) {
                     sh_state = 'D';
-                    special_screen = 0;
                 }
                 if (abs(ang1_int) >= abs(ang0_int) && (abs(ang1_int) >= abs(ang2_int)))
                     sh_state = 'U';
                 if (abs(ang0_int) >= abs(ang1_int) && (abs(ang0_int) >= abs(ang2_int))) {
                     if (ang0_int >= 0) {
                         sh_state = 'N';
-                        special_screen = 1;
                     }
                     else {
                         sh_state = 'S';
-                        special_screen = 2;
                     }
                 }
                 
@@ -225,31 +243,39 @@ static void eclipsetx_thread_entry(ULONG parameter)
                 }
                 //else
                 // sprintf(s, "%3iL", shake_val);
+                
+            }
 
-                sprintf(s, "%3i%c", shake_val, sh_state);
-                // Shaken cool down
-                angul_integral = angul_integral * 0.95 + angul_total * 0.05;
-                ang0_int = ang0_int * 0.9 + 0.0 * (double)(accel_gyro.angular_rate_mdps[0]);
-                ang1_int = ang1_int * 0.9 + 0.0 * (double)(accel_gyro.angular_rate_mdps[1]);
-                ang2_int = ang2_int * 0.9 + 0.0 * (double)(accel_gyro.angular_rate_mdps[2]);
+            // Diag print
+            sprintf(s, "%3i%c", shake_val, sh_state);
+
+            if (just_shaken) {
+                if ((special_screen == 1) || (special_screen == 2)) {
+                    if ((sh_state == 'N') || (sh_state == 'S'))
+                        special_screen = 0;
+                    else if (sh_state == 'D')
+                        special_screen = 8;
+                } else {
+                    if (sh_state == 'N')
+                        special_screen = 1;
+                    if (sh_state == 'S')
+                        special_screen = 2;
+                    if (sh_state == 'D')
+                        special_screen = 8;
+                }
             }
-            else {
-                // only if not shaken recently -- standard behaviour
-                ang0_int = ang0_int * 0.7 + 0.3 * (double)(accel_gyro.angular_rate_mdps[0]);
-                ang1_int = ang1_int * 0.7 + 0.3 * (double)(accel_gyro.angular_rate_mdps[1]);
-                ang2_int = ang2_int * 0.7 + 0.3 * (double)(accel_gyro.angular_rate_mdps[2]);
-                sprintf(s, "%3i.", shake_val);
-            }
+            ssd1306_SetCursor(95, L1 + 1);
             ssd1306_WriteString(s, Font_7x10, White);
         }
 
         
-        if (prev_time == read_time) {
+        if ((prev_time == read_time) && (prev_special_screen == special_screen)) {
             // update screen for fast processes (magnetic, gyro)
             ssd1306_UpdateScreen();
             // prev_time = read_time;
             continue;
         }
+
         prev_time = read_time;
 
         hts221_data_t data = hts221_data_read(); 
@@ -260,23 +286,31 @@ static void eclipsetx_thread_entry(ULONG parameter)
         { // print Time on OLED screen
             sprintf(s, "%02i:%02i:%02i", (time / 60) / 60,
                 (time / 60) % 60, time % 60);
-            
-            if ((special_screen != 1) && (special_screen != 2)) {
-                if (time % 60 >= 10) {
-                    special_screen = 2 + (time % 60) / 10;
-                } else
-                    special_screen = 0;
-            }
 
             screen_print_col(s, L0, Black);
-            ssd1306_SetCursor(90, L0);
+            for (i = 0; i<90; i+=1) {
+                ssd1306_DrawPixel(i, 16, Black);
+                ssd1306_DrawPixel(i, 17, Black);
+            }
+                
+            if ((special_screen != 1) && (special_screen != 2)) {
+                if (time % 10 == 0) {
+                    if ((time % 60) / 10 >= 1)
+                        special_screen = 2 + (time % 60) / 10;
+                    else 
+                        special_screen = 0;
+                }
+            }
+
+            ssd1306_SetCursor(90, L0 + 0);
             ssd1306_WriteString(strs[2 * special_screen], Font_7x10, White);
             ssd1306_SetCursor(90, L0 + 8);
-            ssd1306_WriteString(strs[2* special_screen + 1], Font_7x10, White);
+            ssd1306_WriteString(strs[2 * special_screen + 1], Font_7x10, White);
         }
 
 
-        if ((data.temperature_degC != temp) || (data.humidity_perc != humid)) {
+        if ((data.temperature_degC != temp) || (data.humidity_perc != humid)
+            || (prev_special_screen != special_screen)) {
             temp = data.temperature_degC;
             humid = data.humidity_perc;
 
@@ -299,7 +333,7 @@ static void eclipsetx_thread_entry(ULONG parameter)
             if (show_press < min_press)
                 min_press = show_press;
 
-            char temp_char = 't';
+            char temp_char = ' ';
 
             if (special_screen == 1) {
                 show_temp = max_temp;
@@ -325,7 +359,7 @@ static void eclipsetx_thread_entry(ULONG parameter)
                 (int) (data_p.pressure_hPa * 10)
             ); */
 
-            sprintf(s, "%c%+2i.%02i", temp_char,
+            sprintf(s, "%c%3i.%02i", temp_char,
                 (int)(show_temp), ((int) (show_temp * 100)) % 100);
                 //(int)(temp_1), ((int) (temp_1 * 10)) % 10);
             screen_print_col(s, L1, White);
@@ -349,12 +383,13 @@ static void eclipsetx_thread_entry(ULONG parameter)
 
             // hPa
             {
-                ssd1306_SetCursor(100, L2 + 16);
+                ssd1306_SetCursor(105, L2 + 16);
                 // sprintf(s, "%i", shake_count);
                 ssd1306_WriteString("hPa", Font_7x10, White);
             }
         }
-        
+
+        prev_special_screen = special_screen;
         ssd1306_UpdateScreen();
     }
 
@@ -386,7 +421,6 @@ int main(void)
 {
     // Initialize the board
     board_init();
-
     // Enter the ThreadX kernel
     tx_kernel_enter();
 

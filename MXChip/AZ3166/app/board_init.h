@@ -18,6 +18,9 @@
 
 #include "stm32f4xx_hal.h"
 
+int btn_a_state();
+int btn_b_state();
+
 #define BUTTON_A_PIN GPIO_PIN_4
 #define BUTTON_B_PIN GPIO_PIN_10
 

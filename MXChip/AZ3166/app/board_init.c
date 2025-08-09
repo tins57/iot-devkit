@@ -332,15 +332,28 @@ static void UART_Console_Init(void)
 }
 
 static int val;
+int btn_a = 0;
+int btn_b = 0;
+
+int btn_a_state() {
+    return btn_a;
+}
+
+int btn_b_state() {
+    return btn_b;
+}
 
 __weak void button_a_callback()
 {
-
     WIFI_LED_ON();
     CLOUD_LED_ON();
     USER_LED_ON();
     if (BUTTON_A_IS_PRESSED)
     {
+        btn_a++;
+        if (BUTTON_B_IS_PRESSED) {
+            btn_a+=59;
+        }
         if (val < 4095)
             val = val * 2 + 1;
         RGB_LED_SET_R(val);
@@ -354,14 +367,18 @@ __weak void button_b_callback()
 
     WIFI_LED_OFF();
     CLOUD_LED_OFF();
-    USER_LED_OFF();
+    // USER_LED_OFF();
     if (BUTTON_B_IS_PRESSED)
     {
+        btn_b++;
+        if (BUTTON_A_IS_PRESSED) {
+            btn_b+=59;
+        }
         if (val > 0)
             val = val >> 1;
-        RGB_LED_SET_R(val / 3);
-        RGB_LED_SET_G(val);
-        RGB_LED_SET_B(val >> 5);
+        RGB_LED_SET_R(val);
+        RGB_LED_SET_G(val / 2);
+        RGB_LED_SET_B(val >> 4);
     }
 }
 
